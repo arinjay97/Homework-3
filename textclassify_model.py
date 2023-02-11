@@ -131,12 +131,23 @@ def f1(gold_labels, predicted_labels):
     true_positive, false_positive, true_negative, false_negative = find_confusion_matrix(gold_labels, predicted_labels)
     precision_score = true_positive / (true_positive + false_positive)
     recall_score = true_positive / (true_positive + false_negative)
-    return 0 if precision_score + recall_score == 0 else (2 * precision_score * recall_score) / (precision_score + recall_score)
+    return 0 if precision_score + recall_score == 0 else (2 * precision_score * recall_score) / (
+                precision_score + recall_score)
 
 
-"""
-Implement any other non-required functions here
-"""
+def sigmoid(z):
+    """
+    Calculate the sigmoid function
+    """
+    return 1 / (1 + np.exp(-z))
+
+
+def binary_cross_entropy_loss(label, probabilities):
+    """
+    Compute the binary cross-entropy loss
+    """
+    return -(label * np.log(probabilities) + (1 - label) * np.log(1 - probabilities))
+
 
 """
 implement your TextClassify class here
@@ -233,9 +244,35 @@ class TextClassifyImproved:
     def __init__(self):
         self.pos_lex = load_word_list("positive_words.txt")
         self.neg_lex = load_word_list("negative_words.txt")
-        self.labels = {}
         self.vocab = set()
-        self.word_counts = {}
+        self.weights = None
+        self.bias = 0
+
+    def __create_sample_matrix(self, examples):
+        samples = []
+        labels = []
+        for review_id, review, label in examples:
+            feature_vector = self.featurize(review)
+            samples.append(np.array(list(feature_vector.values())))
+            labels.append(int(label))
+        return np.array(samples), np.array(labels)
+
+    def __gradient_descent(self, samples, labels):
+        learning_rate = 0.1
+        max_iterations = 1000
+        num_samples, num_features = samples.shape
+        self.weights = np.zeros(num_features)
+
+        for i in range(max_iterations):
+            z = np.dot(samples, self.weights) + self.bias
+            h = sigmoid(z)
+            error = h - labels
+            gradient_weights = np.dot(samples.T, error) / num_samples
+            gradient_bias = np.sum(error) / num_samples
+            loss = np.mean(binary_cross_entropy_loss(labels, h))
+            # print("Loss for iteration", i, ":", loss)
+            self.weights -= learning_rate * gradient_weights
+            self.bias -= learning_rate * gradient_bias
 
     def train(self, examples):
         """
@@ -244,16 +281,24 @@ class TextClassifyImproved:
           examples - a list of tuples of strings formatted [(id, example_text, label), (id, example_text, label)....]
         Return: None
         """
-        pass
+        for review_id, review, label in examples:
+            for word in review.split():
+                self.vocab.add(word)
+
+        samples, labels = self.__create_sample_matrix(examples)
+        self.__gradient_descent(samples, labels)
 
     def score(self, data):
         """
         Score a given piece of text
+
         Parameters:
           data - str like "I loved the hotel"
         Return: dict of class: score mappings
         """
-        pass
+        feature_vector = list(self.featurize(data).values())
+        z = np.dot(self.weights, np.array(feature_vector)) + self.bias
+        return sigmoid(z)
 
     def classify(self, data):
         """
@@ -262,7 +307,7 @@ class TextClassifyImproved:
           data - str like "I loved the hotel"
         Return: string class label
         """
-        pass
+        return "1" if self.score(data) >= 0.5 else "0"
 
     def featurize(self, data):
         """
@@ -273,7 +318,9 @@ class TextClassifyImproved:
         Return: a list of tuples linking features to values
         for BoW, a list of tuples linking every word to True [("I", True), ("loved", True), ("it", True)]
         """
-        pass
+        words = Counter(data.split())
+        feature_vector = {word: words[word] if word in words else 0 for word in self.vocab}
+        return feature_vector
 
     def __str__(self):
         return "Logistic Regression"
@@ -282,20 +329,47 @@ class TextClassifyImproved:
 def main():
     training = sys.argv[1]
     testing = sys.argv[2]
-    training_file = open(training)
-    testing_file = open(testing)
-
+    examples = generate_tuples_from_file(training)
+    tests = generate_tuples_from_file(testing)
     classifier = TextClassify()
     print(classifier)
     # do the things that you need to with your base class
+    classifier.train(examples)
+    gold_labels = []
+    predicted_labels = []
+    for _, test_sentence, actual_label in tests:
+        gold_labels.append(actual_label)
+        predicted_labels.append(classifier.classify(test_sentence))
 
     # report precision, recall, f1
+    true_positive, false_positive, true_negative, false_negative = find_confusion_matrix(gold_labels, predicted_labels)
+    precision_score = true_positive / (true_positive + false_positive)
+    recall_score = true_positive / (true_positive + false_negative)
+    f1_score = 0 if precision_score + recall_score == 0 else (2 * precision_score * recall_score) / (
+                precision_score + recall_score)
+    print("Precision for Naive Bayes Classifier:", precision_score)
+    print("Recall for Naive Bayes Classifier:", recall_score)
+    print("F-1 Score for Naive Bayes Classifier:", f1_score)
 
     improved = TextClassifyImproved()
     print(improved)
+    improved.train(examples)
+    gold_labels = []
+    predicted_labels = []
     # do the things that you need to with your improved class
+    for _, test_sentence, actual_label in tests:
+        gold_labels.append(actual_label)
+        predicted_labels.append(improved.classify(test_sentence))
 
     # report final precision, recall, f1 (for your best model)
+    true_positive, false_positive, true_negative, false_negative = find_confusion_matrix(gold_labels, predicted_labels)
+    precision_score = true_positive / (true_positive + false_positive)
+    recall_score = true_positive / (true_positive + false_negative)
+    f1_score = 0 if precision_score + recall_score == 0 else (2 * precision_score * recall_score) / (
+            precision_score + recall_score)
+    print("Precision for Logistic Regression Classifier:", precision_score)
+    print("Recall for Logistic Regression Classifier:", recall_score)
+    print("F-1 Score for Logistic Regression Classifier:", f1_score)
 
 
 if __name__ == "__main__":
